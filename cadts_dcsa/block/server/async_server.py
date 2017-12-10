@@ -53,8 +53,7 @@ class FileInfo(object):
             self.finished = True
 
             real_sha1 = self.sha1.hexdigest()
-            file_sha1 = calc_sha1(self.file_path)
-            LOG.debug('SHA1: %s vs %s vs %s', real_sha1, self.file_sha1, file_sha1)
+            LOG.debug('SHA1: %s vs %s', real_sha1, self.file_sha1)
             if real_sha1 == self.file_sha1:
                 with open(self.sha1_path, 'wb') as sha1_file:
                     sha1_file.write(real_sha1)
