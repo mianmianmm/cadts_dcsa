@@ -12,7 +12,7 @@ def calc_sha1(file_path):
         data = f.read(BUF_SIZE)
         while data:
             sha1.update(data)
-            data=f.read(BUF_SIZE)
+            data = f.read(BUF_SIZE)
         return sha1.hexdigest()
 
 
@@ -30,8 +30,11 @@ def encode_file_header(file_path):
     })
 
 
-def encode_response(recv_info):
-    return encode_header(recv_info)
+def encode_response(success=True, error=None):
+    return encode_header({
+        'success': success,
+        'reason': error
+    })
 
 
 def receive_all(s, length):
@@ -47,3 +50,16 @@ def receive_all(s, length):
 
 def send_all(s, data):
     s.sendall(data)
+
+
+def file_size_string(size):
+    size_units = ['', 'K', 'M', 'G', 'T']
+    unit_count = len(size_units)
+    size = float(size)
+
+    unit_index = 0
+    while size > 1024 and unit_index < unit_count:
+        unit_index += 1
+        size /= 1024.
+
+    return '{:.2f}{}'.format(size, size_units[unit_index])

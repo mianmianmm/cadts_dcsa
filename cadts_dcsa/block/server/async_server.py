@@ -1,137 +1,145 @@
 # coding=utf-8
+import hashlib
 import json
 import struct
 import os
-from twisted.internet.protocol import Factory
+import sys
+import logging
+import logging.config
+from twisted.internet.protocol import Factory, connectionDone
 from twisted.internet.protocol import Protocol
 
-from cadts_dcsa.block.utils import calc_sha1, encode_response
+from cadts_dcsa.block.utils import calc_sha1, encode_response, file_size_string
 
-clients=[]
-
+LOG = logging.getLogger(__name__)
 
 SAVE_DIR = 'E:\\tmp'
 
-class MyProtocol(Protocol):
-    _buffer = ""  # 接收缓冲区
-    tmpbuf = ''  # 暂存上次未接受完的内容
-    response = False
-    header_len = 0
-    file_len = 0
-    file_sha1 = 0
-    file_name = ''
-    recv_size = 0  # 初始化已接收文件的长度
-    recv_sha1 = ''
-    recv_file_name = ''
-    recv_file_name_sha1 = ''
-    recv_info = ''
+STATE_LEN = 0
+STATE_HEADER = 1
+STATE_CONTENT = 2
+
+ERROR_SHA1_MISMATCH = 'SHA1 mismatch'
+
+
+class FileInfo(object):
+    def __init__(self, header_json):
+        self.file_name = header_json['file_name']
+        self.file_len = header_json['file_len']
+        self.file_sha1 = header_json['file_sha1']
+        self.file_path = os.path.join(SAVE_DIR, self.file_name)
+        self.sha1_path = os.path.join(SAVE_DIR, self.file_name + '.sha1')
+
+        self.file = open(self.file_path, 'wb')
+        self.bytes_written = 0
+        self.finished = False
+        self.error = None
+        self.sha1 = hashlib.sha1()
+
+    def write(self, data):
+        remain = self.file_len - self.bytes_written
+        more = ''
+
+        if remain < data:
+            more = data[remain:]
+            data = data[0:remain]
+
+        self.bytes_written += len(data)
+        self.file.write(data)
+        self.sha1.update(data)
+
+        if self.bytes_written == self.file_len:
+            self.close()
+            self.finished = True
+
+            real_sha1 = self.sha1.hexdigest()
+            file_sha1 = calc_sha1(self.file_path)
+            LOG.debug('SHA1: %s vs %s vs %s', real_sha1, self.file_sha1, file_sha1)
+            if real_sha1 == self.file_sha1:
+                with open(self.sha1_path, 'wb') as sha1_file:
+                    sha1_file.write(real_sha1)
+            else:
+                self.error = ERROR_SHA1_MISMATCH
+
+        return more
+
+    def close(self):
+        if self.file:
+            self.file.close()
+            self.file = None
+
+
+class FileReceiveProtocol(Protocol):
+
+    def __init__(self):
+        self.state = STATE_LEN
+        self.buffer = ''
+        self.header_len = 0
+        self.file_info = None
 
     def connectionMade(self):
-        self.factory.numPorts +=1
-        self.number=self.factory.numPorts-1
-        print 'connection %d ....' % (self.number,), 'from: ', self.transport.client
-        self.sendData('you are client %d...' % (self.factory.numPorts-1,))
-        clients.append(self)
+        self.state = STATE_LEN
+        LOG.info('Connection from %s', self.transport.getPeer())
 
-
-    def connectionLost(self, reason):
-        self.factory.numPorts -= 1
-        clients.remove(self)
-        print self.transport.client, 'disconnected  '
+    def connectionLost(self, reason=connectionDone):
+        self.close_file()
+        LOG.info('Connection lost %s: %s', self.transport.getPeer(), reason)
 
     def dataReceived(self, data):
-        self._buffer = data
-        # leng=len(self._buffer)
-        # print leng
-        if len(self.tmpbuf) != 0:
-            self._buffer = self.tmpbuf + self._buffer
-            self.tmpbuf = ''
+        if self.state != STATE_CONTENT:
+            self.buffer += data
+        else:
+            self.buffer = data
 
-        if self.recv_size == self.file_len:  # 准备开始接收第1个文件（或当前文件接收完成）
-            self.recv_size = 0  # 已接收大小置0，准备接受下一个文件
-            if len(self._buffer) < 4:
-                print 'cilent %d :pack header_len error of ...' % (self.factory.numPorts-1,)
-                return
-            self.header_len, = struct.unpack('!I', self._buffer[0:4])  # unpack header_len
-            if len(self._buffer) < 4 + self.header_len:
-                print 'cilent %d :pack header error of ...' % (self.factory.numPorts-1,)
-                return
-            header_string = self._buffer[4:4 + self.header_len]  # unpack headers
-            header = json.loads(header_string)
-            self.recv_info = header
-            self.file_name = header['file_name']
-            self.file_len = header['file_len']
-            self.file_sha1 = header['file_sha1']
-            self.recv_file_name = os.path.join(SAVE_DIR, self.file_name)
-            self.recv_file_name_sha1 = os.path.join(SAVE_DIR, self.file_name + '.sha1')
-            self._buffer = self._buffer[4 + self.header_len:]  # 开始接收文件内容
-            with open(self.recv_file_name, 'wb+') as f:
-                self.recv_size += len(self._buffer)
-                f.write(self._buffer)
-            if self.recv_size == self.file_len:  # 当前文件接收完毕，则校验sha1值
-                self.recv_sha1 = calc_sha1(self.recv_file_name)
-                if self.recv_sha1 == self.file_sha1:
-                    print 'cilent %d :\"%s\" receive done , calc sha1 ok!' % (self.factory.numPorts-1,self.file_name)
-                    self.response = True
-                    with open(self.recv_file_name_sha1, 'wb+') as ff:
-                        ff.write(self.recv_sha1)
+        if self.state == STATE_LEN:
+            if len(self.buffer) >= 4:
+                self.header_len = struct.unpack('!I', self.buffer[0:4])[0]
+                self.buffer = self.buffer[4:]
+                self.state = STATE_HEADER
+                LOG.debug('Header len: %d', self.header_len)
+
+        if self.state == STATE_HEADER:
+            if len(self.buffer) >= self.header_len:
+                header_string = self.buffer[0:self.header_len]
+                header_json = json.loads(header_string)
+                self.file_info = FileInfo(header_json)
+                self.buffer = self.buffer[self.header_len:]
+                self.state = STATE_CONTENT
+                LOG.debug('Header: %s', header_json)
+                if self.buffer:
+                    LOG.debug('ADD %d', len(self.buffer))
+                    self.buffer = self.file_info.write(self.buffer)
+
+        if self.state == STATE_CONTENT:
+            self.buffer = self.file_info.write(self.buffer)
+            if self.file_info.finished:
+                self.state = STATE_LEN
+                if not self.file_info.error:
+                    self.transport.write(encode_response())
+                    LOG.debug('Success sent %sBytes', file_size_string(self.file_info.file_len))
                 else:
-                    print 'client %d :\"%s\"receive done ,calc sha1 failed!' % (self.factory.numPorts-1,self.file_name)
-                    self.response = False
-                self.recv_info['success'] = self.response  # 返回给客户端
-                response = encode_response(self.recv_info)
-                # print response
-                self.sendData(response)
-        elif self.recv_size < self.file_len:  # 当前文件未接收完毕
-            self.recv_size += len(self._buffer)
-            if self.recv_size <= self.file_len:  # 文件未接收完毕（或恰好接收完毕）
-                with open(self.recv_file_name, 'ab+') as f:
-                    f.write(self._buffer)
-                if self.recv_size == self.file_len:  # 文件恰好接收完毕，则校验sha1值
-                    self.recv_sha1 = calc_sha1(self.recv_file_name)
-                    if self.recv_sha1 == self.file_sha1:
-                        print 'cilent %d :\"%s\" receive done , calc sha1 ok!' % (self.factory.numPorts - 1, self.file_name)
-                        self.response = True
-                        with open(self.recv_file_name_sha1, 'wb+') as ff:
-                            ff.write(self.recv_sha1)
-                    else:
-                        print 'client %d :\"%s\"receive done ,calc sha1 failed!' % (self.factory.numPorts - 1, self.file_name)
-                        self.response = False
-                    self.recv_info['success'] = self.response  # 返回给客户端
-                    response = encode_response(self.recv_info)
-                    # print response
-                    self.sendData(response)
-            else:  # 接收内容超出当前文件大小
-                with open(self.recv_file_name, 'ab+') as f:
-                    f.write(self._buffer[0:self.file_len - self.recv_size])
-                    self.tmpbuf = self._buffer[self.recv_size - self.file_len]  # 暂存超出的部分，用来进行下一个文件的接收
-                    self.recv_size = self.file_len  # 当前文件接收完毕，则校验sha1值
-                    self.recv_sha1 = calc_sha1(self.recv_file_name)
-                    if self.recv_sha1 == self.file_sha1:
-                        print 'cilent %d :\"%s\" receive done , calc sha1 ok!' % (self.factory.numPorts - 1, self.file_name)
-                        self.response = True
-                        with open(self.recv_file_name_sha1, 'wb+') as ff:
-                            ff.write(self.recv_sha1)
-                    else:
-                        print 'client %d :\"%s\"receive done ,calc sha1 failed!' % (self.factory.numPorts - 1, self.file_name)
-                        self.response = False
-                    self.recv_info['success'] = self.response  # 返回给客户端
-                    response = encode_response(self.recv_info)
-                    # print response
-                    self.sendData(response)
+                    self.transport.write(encode_response(False, self.file_info.error))
+                    LOG.debug('Failed to send %sBytes: %s', file_size_string(self.file_info.file_len),
+                              self.file_info.error)
+                self.close_file()
 
-        self._buffer = ''
-
-    def sendData(self, data):
-        self.transport.write(data)
+    def close_file(self):
+        if self.file_info:
+            self.file_info.close()
+            self.file_info = None
 
 
 if __name__ == '__main__':
-    if os.name!='nt':
+    logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+
+    if os.name != 'nt':
         from twisted.internet import epollreactor
+
         epollreactor.install()
+
     from twisted.internet import reactor
+
     factory = Factory()
-    factory.protocol = MyProtocol
+    factory.protocol = FileReceiveProtocol
     reactor.listenTCP(1234, factory)
     reactor.run()
