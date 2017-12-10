@@ -116,7 +116,7 @@ class FileReceiveProtocol(Protocol):
                 self.state = STATE_LEN
                 if not self.file_info.error:
                     self.transport.write(encode_response())
-                    LOG.debug('Success sent %sBytes', file_size_string(self.file_info.file_len))
+                    LOG.debug('Successfully sent %sBytes', file_size_string(self.file_info.file_len))
                 else:
                     self.transport.write(encode_response(False, self.file_info.error))
                     LOG.debug('Failed to send %sBytes: %s', file_size_string(self.file_info.file_len),
