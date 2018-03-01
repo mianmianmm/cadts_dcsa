@@ -52,7 +52,7 @@ def send_files(host, port, *file_list):
 
 if __name__ == '__main__':
     start = time.clock()
-    total_size = send_files('127.0.0.1', 1234, u'E:\\Users\\LiRui\\Downloads\\cn_windows_10_multiple_editions_version_1607_updated_jul_2016_x64_dvd_9056935.iso')
+    total_size = send_files('127.0.0.1', 1234, u'E:\\Users\\LiRui\\Downloads\\kali-linux-2018.1-amd64.iso')
     elapsed = time.clock() - start
     speed = total_size / elapsed
     print '''time: {:.2f}s
