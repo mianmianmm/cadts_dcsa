@@ -346,6 +346,7 @@ bin/kibana
 ![](img/12.png)
 
 （4）配置索引
+
 默认，Kibana的数据被指向Elasticsearch，使用默认的logstash-*的索引名称，并且是基于时间的，点击“Create”即可。
 
 完成之后出现如下界面：
