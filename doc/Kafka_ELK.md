@@ -1,11 +1,18 @@
 Kafka_ELK环境搭建说明文档
 =================
->虚拟机环境：
-1.主机系统：win10
-2.虚拟机：VMware Workstation
-3.虚拟机系统：Ubuntu16.04
-4.java版本：1.8
-5.python版本：python2.7
+
+>**虚拟机环境**
+
+>主机系统：win10
+
+>虚拟机：VMware Workstation
+
+>虚拟机系统：Ubuntu16.04
+
+>java版本：1.8
+
+>python版本：python2.7
+
 
 
 一、Kafka单机环境搭建
@@ -213,14 +220,23 @@ for message in balanced_consumer:
 
 
 >**参考网址**
+
 1.[安装Java环境]:
+
 http://blog.csdn.net/dst1213/article/details/51232053
-2.[Zookeeper和kafka服务搭建]:     
-http://www.cnblogs.com/vipzhou/p/7235625.html     
-http://www.cnblogs.com/tonglin0325/p/7039747.html    
+
+2.[Zookeeper和kafka服务搭建]:
+
+http://www.cnblogs.com/vipzhou/p/7235625.html
+
+http://www.cnblogs.com/tonglin0325/p/7039747.html
+
 3.[传输消息]:
+
 http://blog.csdn.net/jingshuigg/article/details/24439637
+
 4.[python操作kafka]:
+
 https://my.oschina.net/u/2263272/blog/788006
 
 
@@ -427,11 +443,16 @@ print resp_docs[0]['_source']['@timestamp']
 ```          
 <br /> 
 
->**参考网址**  
-1.[elk安装]:   
-http://www.linuxidc.com/Linux/2016-06/132618.htm    
-http://blog.csdn.net/gamer_gyt/article/details/52654263       
+>**参考网址**
+
+1.[elk安装]:
+
+http://www.linuxidc.com/Linux/2016-06/132618.htm
+
+http://blog.csdn.net/gamer_gyt/article/details/52654263
+
 2.[python操作elasticsearch语法]:
+
 http://www.cnblogs.com/dplearning/p/5975158.html
 
 <br /> 
@@ -595,10 +616,14 @@ with topic.get_sync_producer() as producer:
 
 <br/>
 
->**参考网址**     
-1.[kafka连接logstash]:       
-http://tchuairen.blog.51cto.com/3848118/1855090    
-http://www.cnblogs.com/shiyiwen/p/6150213.html          
+>**参考网址**
+
+1.[kafka连接logstash]:
+
+http://tchuairen.blog.51cto.com/3848118/1855090
+
+http://www.cnblogs.com/shiyiwen/p/6150213.html
+
 http://blog.csdn.net/gaowenhui2008/article/details/70231146 
 
 
@@ -840,8 +865,10 @@ produce_kafka_file(refilename,retopic)
 
 <br/>
 
->**参考网址**     
-1.[kafka_elk系统搭建]:       
+>**参考网址**
+
+1.[kafka_elk系统搭建]:
+
 https://www.cnblogs.com/luotianshuai/p/5206662.html  
 
 <br />
